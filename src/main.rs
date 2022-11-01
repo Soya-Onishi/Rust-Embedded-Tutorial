@@ -7,26 +7,23 @@ use panic_halt as _; // you can put a breakpoint on `rust_begin_unwind` to catch
 // use panic_itm as _; // logs messages over ITM; requires ITM support
 // use panic_semihosting as _; // logs messages to the host stderr; requires a debugger
 
-use core::fmt::Write;
-
 use cortex_m_rt::entry;
-use cortex_m_semihosting::{debug, hio};
-use cortex_m::peripheral::{syst, Peripherals};
+use cortex_m;
+use tm4c123x;
 
 #[entry]
 fn main() -> ! {
-    let peripherals = Peripherals::take().unwrap();
-    let mut systick = peripherals.SYST;
-    systick.set_clock_source(syst::SystClkSource::Core);
-    systick.set_reload(1_000);
-    systick.clear_current();
-    systick.enable_counter();
+    let cp = cortex_m::Peripherals::take().unwrap();
+    let p = tm4c123x::Peripherals::take().unwrap();
+    
+    let pwm = p.PWM0;
+    pwm.ctl.write(|w| w.globalsync0().clear_bit());
+    pwm._2_ctl.write(|w| w.enable().set_bit().mode().set_bit());
+    pwm._2_gena.write(|w| w.actcmpau().zero().actcmpad().one());
 
-    while !systick.has_wrapped() {}
-
-    let mut stdout = hio::hstdout().unwrap();
-    writeln!(stdout, "clock is done").unwrap();
-    debug::exit(debug::EXIT_SUCCESS);
+    pwm._2_load.write(|w| unsafe { w.load().bits(263) });
+    pwm._2_cmpa.write(|w| unsafe { w.compa().bits(64) });
+    pwm.enable.write(|w| w.pwm4en().set_bit());
 
     loop {}
 }
