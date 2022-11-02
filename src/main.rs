@@ -1,4 +1,3 @@
-#![deny(unsafe_code)]
 #![no_std]
 #![no_main]
 
@@ -17,36 +16,21 @@ use cortex_m_semihosting::{
     hio::{self, HStdout}
 };
 
+#[repr(C)]
+struct SysTick {
+    pub csr: u32,
+    pub rvr: u32,
+    pub cvr: u32,
+    pub calib: u32
+}
 
 #[entry]
 fn main() -> ! {
-    let p = cortex_m::Peripherals::take().unwrap();
-    let mut syst = p.SYST;
+    let systick = unsafe { &mut *(0xE000_E010 as *mut SysTick) };
+    let time =  unsafe { core::ptr::read_volatile(&mut systick.cvr)};
+    let mut stdout = hio::hstdout().unwrap();
 
-    syst.set_clock_source(SystClkSource::Core);
-    syst.set_reload(12_000_000);
-    syst.enable_counter();
-    syst.enable_interrupt();
+    writeln!(stdout, "time: {}", time).unwrap();
 
     loop {}
-}
-
-#[exception]
-fn SysTick() {
-    static mut COUNT: u32 = 0;
-    static mut STDOUT: Option<HStdout> = None;   
-
-    *COUNT += 1;
-
-    if STDOUT.is_none() {
-        *STDOUT = hio::hstdout().ok();
-    }
-
-    if let Some(hstdout) = STDOUT.as_mut() {
-        writeln!(hstdout, "{}", *COUNT).unwrap();
-    }
-
-    if *COUNT == 10 {        
-        debug::exit(debug::EXIT_SUCCESS);
-    }
 }
