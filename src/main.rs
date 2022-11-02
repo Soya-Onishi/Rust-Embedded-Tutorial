@@ -1,3 +1,4 @@
+#![deny(unsafe_code)]
 #![no_std]
 #![no_main]
 
@@ -9,40 +10,43 @@ use panic_halt as _; // you can put a breakpoint on `rust_begin_unwind` to catch
 
 use core::fmt::Write;
 
-use cortex_m_rt::entry;
-use tm4c123x_hal as hal;
-use tm4c123x_hal::prelude::*;
-use tm4c123x_hal::serial::{NewlineMode, Serial};
-use tm4c123x_hal::sysctl;
+use cortex_m::peripheral::syst::SystClkSource;
+use cortex_m_rt::{entry, exception};
+use cortex_m_semihosting::{
+    debug,
+    hio::{self, HStdout}
+};
+
 
 #[entry]
 fn main() -> ! {
-    let p = hal::Peripherals::take().unwrap();
-    let cp = hal::CorePeripherals::take().unwrap();    
+    let p = cortex_m::Peripherals::take().unwrap();
+    let mut syst = p.SYST;
 
-    let mut sc = p.SYSCTL.constrain();
-    sc.clock_setup.oscillator = sysctl::Oscillator::Main(
-        sysctl::CrystalFrequency::_16mhz,
-        sysctl::SystemClock::UsePll(sysctl::PllOutputFrequency::_80_00mhz)
-    );
+    syst.set_clock_source(SystClkSource::Core);
+    syst.set_reload(12_000_000);
+    syst.enable_counter();
+    syst.enable_interrupt();
 
-    let clocks = sc.clock_setup.freeze();
+    loop {}
+}
 
-    let mut porta = p.GPIO_PORTA.split(&sc.power_control);
+#[exception]
+fn SysTick() {
+    static mut COUNT: u32 = 0;
+    static mut STDOUT: Option<HStdout> = None;   
 
-    let mut uart = Serial::uart0(
-        p.UART0,
-        porta.pa1.into_af_push_pull::<hal::gpio::AF1>(&mut porta.control),
-        porta.pa0.into_af_push_pull::<hal::gpio::AF1>(&mut porta.control),
-        (),
-        (),
-        115200_u32.bps(),
-        NewlineMode::SwapLFtoCRLF,
-        &clocks,
-        &sc.power_control
-    );
-    
-    loop {
-        writeln!(uart, "Hello World!!\r\n").unwrap();
+    *COUNT += 1;
+
+    if STDOUT.is_none() {
+        *STDOUT = hio::hstdout().ok();
+    }
+
+    if let Some(hstdout) = STDOUT.as_mut() {
+        writeln!(hstdout, "{}", *COUNT).unwrap();
+    }
+
+    if *COUNT == 10 {        
+        debug::exit(debug::EXIT_SUCCESS);
     }
 }
