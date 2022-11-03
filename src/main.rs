@@ -9,13 +9,37 @@ use panic_halt as _; // you can put a breakpoint on `rust_begin_unwind` to catch
 
 use core::fmt::Write;
 
-use cortex_m::peripheral::syst::SystClkSource;
-use cortex_m_rt::{entry, exception};
+
+use cortex_m_rt::entry;
 use volatile_register::{RW, RO};
-use cortex_m_semihosting::{
-    debug,
-    hio::{self, HStdout}
-};
+use cortex_m_semihosting::{debug, hio};
+
+#[derive(Debug)]
+struct Foo {
+    num: u32
+}
+
+struct FooBuilder {
+    a: u32,
+    b: u32
+}
+
+impl FooBuilder {
+    fn new(starter: u32) -> Self {
+        Self { a: starter, b: starter }
+    }
+
+    fn double_a(&self) -> Self {
+        Self {
+            a: self.a * 2,
+            b: self.b
+        }
+    }
+
+    fn into_foo(&self) -> Foo {
+        Foo { num: self.a + self.b }
+    }
+}
 
 struct SysTick {
     p: &'static mut RegisterBlock
@@ -54,6 +78,12 @@ fn main() -> ! {
     for _ in 0..100 {
         writeln!(stdout, "time: {}", syst.get_time()).unwrap();
     }
+
+    let builder = FooBuilder::new(2);
+    let builder = builder.double_a();
+    let foo = builder.into_foo();
+
+    writeln!(stdout, "{:?}", foo).unwrap();
 
     debug::exit(debug::EXIT_SUCCESS);
 
